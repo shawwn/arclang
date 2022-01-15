@@ -1,3 +1,4 @@
+import sys
 import json
 from contextlib import contextmanager
 
@@ -87,22 +88,25 @@ def prn(x, *args):
   return v
 
 @contextmanager
-def tolist():
-  buffer = []
+def tolist(buffer_factory=list):
+  buffer = buffer_factory()
   add(buffer_stack, buffer)
   try:
     yield buffer
   finally:
     drop(buffer_stack)
 
-def prlist(*args):
-  with tolist() as buffer:
-    pr(*args)
-    return buffer
+@contextmanager
+def prlist(buffer_factory=list):
+  with tolist(buffer_factory=buffer_factory) as buffer:
+    yield buffer
+  if not nil(current_buffer()):
+    add(current_buffer(), buffer)
+  # pr(buffer)
 
 @contextmanager
-def tostring():
-  with tolist() as buffer:
+def tostring(buffer_factory=list):
+  with tolist(buffer_factory=buffer_factory) as buffer:
     def value():
       return concat(map(stringify, flat(buffer)))
     yield value
@@ -117,20 +121,14 @@ def pair(l):
   return r
 
 @contextmanager
-def tag(spec):
-  with tolist() as buffer:
-    with tolist() as jsx:
+def tag(name, **props):
+  with prlist() as buffer:
+    with prlist():
       pr("jsx")
-      pr(carif(spec))
-      if alist(spec):
-        props = {}
-        for k, v in pair(tl(spec)):
-          props[k] = v
+      pr(name)
+      if props:
         pr(props)
-    pr(jsx)
     yield buffer
-  if not nil(current_buffer()):
-    add(current_buffer(), buffer)
 
 def center():
   return tag("center")
@@ -139,7 +137,7 @@ def underline():
   return tag("u")
 
 def tab():
-  return tag(["table", "border", 0])
+  return tag("table", border=0)
 
 def tr():
   return tag("tr")
@@ -149,12 +147,12 @@ def td():
 
 @contextmanager
 def trtd():
-  with tr():
+  with tr() as row:
     with td():
-      yield
+      yield row
 
 def tdr():
-  return tag(["td", "align", "right"])
+  return tag("td", align="right")
 
 def prrow(*args):
   with tr() as out:
@@ -180,17 +178,8 @@ def escape(x):
 @contextmanager
 def whitepage():
   with tag('html') as out:
-    with tag(["body", "bgcolor", "white", "alink", "blue"]):
+    with tag("body", bgcolor="white", alink="blue"):
       yield out
-
-def check():
-  with whitepage() as out:
-    with center():
-      with tab():
-        prrow("id", "name")
-        prrow(1, "Shawn")
-        prrow(2, "Emily")
-    return out
 
 def html(*args, indent=0):
   with tostring() as out:
